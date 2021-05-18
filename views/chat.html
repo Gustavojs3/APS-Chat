@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat</title>
+
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+        integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous" />
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"
+        integrity="sha512-iBBXm8fW90+nuLcSKlbmrPcLa0OT92xO1BIsZ+ywDWZCvqsWgccV3gFoRBv0z+8dLJgyAHIhR35VZc2oM/gI1w=="
+        crossorigin="anonymous" />
+
+    <link rel="stylesheet" href="/css/emojionearea.min.css">
+
+    <link rel="stylesheet" type="text/css" href="/css/chat.css" media="screen" />
+</head>
+
+<body>
+    <div class="chat_window" id="chat">
+        <div class="top_menu">
+            <div class="buttons">
+                <div class="dropdown">
+                    <a class="btn btn-primary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"
+                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        Salas
+                    </a>
+
+                    <div class="dropdown-menu" aria-labelledby="dropdownMenuLink">
+                        <a class="dropdown-item" data-sala="geral" href="#">Geral</a>
+                        <a class="dropdown-item" data-sala="jogos" href="#">Jogos</a>
+                        <a class="dropdown-item" data-sala="filmes" href="#">Filmes</a>
+                    </div>
+                </div>
+            </div>
+            <div class="title">
+                <h2>Sala - <span class="sala-atual"></span></h2>
+            </div>
+        </div>
+
+        <ul class="messages"></ul>
+
+        <div class="bottom_wrapper clearfix">
+            <div class="message_input_wrapper">
+                <form id="form_upload" method="post" enctype="multipart/form-data">
+                    <input class="message_input d-none" type="file" name="arquivo" accept="image/*" />
+                </form>
+                <input class="message_input" name="mensagem" placeholder="Digite aqui..." />
+            </div>
+            <div class="send_message">
+                <div class="icon"></div>
+                <div class="text">Enviar</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"
+        integrity="sha512-894YE6QWD5I59HgZOGReFYm4dnWc1Qt5NtvYSaNcOP+u1T9qYdvdihz0PPSiiqn/+/3e7Jo4EaG7TubfWGUrMQ=="
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"
+        integrity="sha512-q/dWJ3kcmjBLU4Qc47E4A9kTB4m3wuTY7vkFJDTZKjTs8jhyGQnaUrxa0Ytd0ssMZhbNua9hE+E7Qv1j+DyZwA=="
+        crossorigin="anonymous"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"
+        integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo"
+        crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"
+        integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6"
+        crossorigin="anonymous"></script>
+
+    <script type="text/javascript"
+        src="https://cdnjs.cloudflare.com/ajax/libs/jquery.textcomplete/1.8.5/jquery.textcomplete.min.js"></script>
+
+    <script type="text/javascript" src="/js/emojionearea.min.js"></script>
+
+    <script type="text/javascript">
+        $(function () {
+            function mostraMensagens(data, grupo_data) {
+                var tipo_usuario = data.usuario_id === data_usuario.usuario_id ? true : false;
+                var li_data = grupo_data ? '<li class="data-chat">' + grupo_data + '</li>' : '';
+
+                $('.messages').append(`${li_data}
+                                        <li class="message ${(tipo_usuario ? 'right' : 'left')} appeared">
+                                            <!-- <div class="avatar">
+                                                <img src="/img/logo.png" id="icon" alt="User Icon" />
+                                            </div> -->
+                                            <div class="text_wrapper">
+                                                <div>
+                                                    <label for="user">${(tipo_usuario ? 'Eu' : data.usuario)}:</label>
+                                                    <label for="date">${data.hora}</label>
+                                                </div>
+                                                <div class="text">${data.mensagem}</div>
+                                                <div class="image">${data.arquivo ? '<img src="/uploads/' + data.arquivo + '" />' : ''}</div>
+                                            </div>
+                                        </li>`);
+            }
+            function Format_Data(timestamp, lang, tz) {
+                let dateObj = new Date(timestamp)
+
+                return dateObj.toLocaleString(lang, {
+                    timeZone: tz,
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                })
+            }
+
+            const socket = io();
+            var data_usuario = {};
+
+            var today = new Date();
+            var hora = today.getHours() + ':' + (today.getMinutes() < 10 ? '0' : '') + today.getMinutes();
+
+            const url = window.location.pathname.split('/');
+            const token = url[2];
+
+            //Conexão do usuário
+            socket.on('connect', function () {
+                socket.emit('validaAcesso', token);
+            });
+
+            //Faz a vericação do usuário
+            socket.on('validaAcesso', async function (data) {
+                if (data) {
+                    console.log('Usuário Altenticado');
+                    data_usuario = data;
+                } else {
+                    window.location.href = "/";
+                }
+
+                $('.top_menu').find('.sala-atual').text(data_usuario.sala.toUpperCase());
+                $('.emojionearea').append('<i class="fas fa-paperclip btn-upload"></i>');
+            });
+
+            socket.on('historicoMensagens', async function (data) {
+                var aux_data = false;
+
+                $('.messages').html('');
+
+                for (d of data) {
+                    let cad = Format_Data(d.cad, 'pt-BR', 'America/Sao_Paulo');
+                    let data = cad.split(' ')[0];
+                    let hora = cad.split(' ')[1].substring(0, 5);
+
+                    d['hora'] = hora;
+
+                    if (aux_data != data) {
+                        aux_data = data;
+                    } else {
+                        aux_data = false;
+                    }
+
+                    mostraMensagens(d, aux_data);
+
+                    aux_data = data;
+                }
+
+                //Scroll para o final da pag.
+                $('.messages').scrollTop(99999);
+            });
+
+            //Recebe as mensagens do servidor
+            socket.on('recebeMensagem', function (data) {
+                mostraMensagens(data);
+            });
+
+            //Emoji
+            $('input[name="mensagem"]').emojioneArea({
+                pickerPosition: "top",
+                tonesStyle: "bullet"
+                // saveEmojisAs:"image"
+            });
+
+            //Click no ícone de upload
+            $(document).on('click', '.btn-upload', function () {
+                $('#form_upload').find('input[name="arquivo"]').click();
+            });
+
+            //Envia mensagem no click do botão
+            $('#chat').on('click', '.send_message', function (event) {
+                var mensagem = $('#chat').find('input[name="mensagem"]').val().trim();
+
+                if (mensagem.length) {
+                    var data = data_usuario;
+                    data['usuario_id_destino'] = null;
+                    data['mensagem'] = mensagem;
+                    data['arquivo'] = null;
+                    data['hora'] = hora;
+
+                    mostraMensagens(data);
+                    socket.emit('enviaMensagem', data);
+
+                    $('#chat').find('.emojionearea-editor').text('');
+                }
+            });
+
+            $('.top_menu').on('click', '[data-sala]', function () {
+                sala = $(this).attr('data-sala');
+
+                socket.emit('mudarSala', { sala: sala });
+
+                data_usuario['sala'] = sala;
+
+                $('.top_menu').find('.sala-atual').text(sala.toUpperCase());
+            });
+
+            //Upload
+            $('[name="arquivo"]').change(function (event) {
+                var form = new FormData($('#form_upload')[0]);
+                form.append('data_usaurio', JSON.stringify(data_usuario));
+
+                $.ajax({
+                    url: 'http://localhost:3000/upload',
+                    type: 'POST',
+                    data: form,
+                    success: function (data) {
+                        mostraMensagens(data);
+                        socket.emit('enviaMensagem', data);
+                    },
+                    cache: false,
+                    contentType: false,
+                    processData: false,
+                    xhr: function () { // Custom XMLHttpRequest
+                        var myXhr = $.ajaxSettings.xhr();
+                        if (myXhr.upload) { // Avalia se tem suporte a propriedade upload
+                            myXhr.upload.addEventListener('progress', function () {
+                                /* faz alguma coisa durante o progresso do upload */
+                            }, false);
+                        }
+                        return myXhr;
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>
