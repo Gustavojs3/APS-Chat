@@ -5,7 +5,7 @@ async function connect() {
         return global.connection;
     } else {
         const mysql = require('mysql2/promise');
-        const connection = await mysql.createConnection('mysql://gustavo:mudar123@@localhost:3306/aps_chat');
+        const connection = await mysql.createConnection('mysql://root@localhost:3306/aps_chat');
         global.connection = connection;
         console.log('Conectado ao BD - APS Chat!');
         return connection;
